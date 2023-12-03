@@ -51,6 +51,31 @@ const Number = struct {
 
         return false;
     }
+
+    fn addGearRef(self: *const Number, map: *PartMap) !void {
+        const min_x: usize = switch (self.x) {
+            0 => 0,
+            else => self.x - 1,
+        };
+        const max_x = self.x + self.len + 1;
+
+        if (self.y > 0) {
+            // check the previous row
+            for (min_x..max_x) |x_val| {
+                try map.addGearRef(x_val, self.y - 1, self.value);
+            }
+        }
+
+        // check current row
+        for (min_x..max_x) |x_val| {
+            try map.addGearRef(x_val, self.y, self.value);
+        }
+
+        // check next row
+        for (min_x..max_x) |x_val| {
+            try map.addGearRef(x_val, self.y + 1, self.value);
+        }
+    }
 };
 
 const Location = struct {
@@ -59,19 +84,22 @@ const Location = struct {
 };
 
 const PartMap = struct {
-    /// Map<(x,y),null> == set<(x,y)>
-    symbols: Map(Location, void),
+    /// Map<(x,y), symbol>
+    symbols: Map(Location, u8),
     numbers: List(Number),
+    gear_refs: Map(Location, List(usize)),
 
     const Self = @This();
 
     fn init(allocator: std.mem.Allocator) !Self {
-        const s = Map(Location, void).init(allocator);
+        const s = Map(Location, u8).init(allocator);
         const n = List(Number).init(allocator);
+        const g = Map(Location, List(usize)).init(allocator);
 
         return Self{
             .symbols = s,
             .numbers = n,
+            .gear_refs = g,
         };
     }
 
@@ -79,18 +107,69 @@ const PartMap = struct {
         return self.symbols.contains(Location{ .x = x, .y = y });
     }
 
+    fn isGear(self: *const PartMap, x: usize, y: usize) bool {
+        if (self.symbols.get(Location{ .x = x, .y = y })) |val| {
+            if (val == '*') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    fn addGearRef(self: *PartMap, x: usize, y: usize, value: usize) !void {
+        if (self.isGear(x, y)) {
+            const result = try self.gear_refs.getOrPut(Location{ .x = x, .y = y });
+
+            if (result.found_existing == true) {
+                try result.value_ptr.*.append(value);
+            } else {
+                var l = List(usize).init(gpa);
+                try l.append(value);
+                result.value_ptr.* = l;
+            }
+        }
+    }
+
     fn deinit(self: *Self) void {
         self.symbols.deinit();
         self.numbers.deinit();
+
+        var iter = self.gear_refs.valueIterator();
+        while (iter.next()) |v| {
+            v.deinit();
+        }
+        self.gear_refs.deinit();
         self.* = undefined;
     }
 
-    fn addSymbol(self: *Self, x: usize, y: usize) !void {
-        _ = try self.symbols.getOrPut(Location{ .x = x, .y = y });
+    fn addSymbol(self: *Self, x: usize, y: usize, s: u8) !void {
+        _ = try self.symbols.put(Location{ .x = x, .y = y }, s);
     }
 
     fn addNumber(self: *Self, num: Number) !void {
         try self.numbers.append(num);
+    }
+
+    fn gearRatioSum(self: *Self) !usize {
+        var total: usize = 0;
+
+        // add the gear xrefs from part -> sym
+        for (self.numbers.items) |num| {
+            if (num.isPart1Part(self)) {
+                try num.addGearRef(self);
+            }
+        }
+
+        // for all the values in the gear_refs
+        var iter = self.gear_refs.valueIterator();
+        while (iter.next()) |ref_list| {
+            if (ref_list.items.len == 2) {
+                total += (ref_list.items[0] * ref_list.items[1]);
+            }
+        }
+
+        return total;
     }
 
     fn part1Sum(self: *const Self) usize {
@@ -152,7 +231,7 @@ const PartMap = struct {
                     } else {
 
                         // found a symbol
-                        try m.addSymbol(x, y);
+                        try m.addSymbol(x, y, i);
                     }
                 }
             }
@@ -174,8 +253,20 @@ pub fn part1() !void {
     print("Part1: `{}`\n", .{sum});
 }
 
+pub fn part2() !void {
+    const alloc = gpa;
+    var m: PartMap = try PartMap.init(alloc);
+    defer m.deinit();
+
+    try m.buildMap(data);
+    const sum = try m.gearRatioSum();
+
+    print("Part2: `{}`\n", .{sum});
+}
+
 pub fn main() !void {
     try part1();
+    try part2();
 }
 
 // Useful stdlib functions
