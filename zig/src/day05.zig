@@ -249,27 +249,31 @@ fn input_to_puzzle(d: []const u8) !Puzzle {
     return p;
 }
 
+inline fn seedToLoc(p: *const Puzzle, seed: usize) usize {
+    //print("$ Seed `{}`\n", .{seed});
+    const soil = p.lookup(.seed_soil, seed);
+    //print("\tSoil: `{}`\n", .{soil});
+    const fert = p.lookup(.soil_fert, soil);
+    //print("\tFert: `{}`\n", .{fert});
+    const water = p.lookup(.fert_water, fert);
+    //print("\tWater: `{}`\n", .{water});
+    const light = p.lookup(.water_light, water);
+    //print("\tLight: `{}`\n", .{light});
+    const temp = p.lookup(.light_temp, light);
+    //print("\tTemp: `{}`\n", .{temp});
+    const humid = p.lookup(.temp_humid, temp);
+    //print("\tHumid: `{}`\n", .{humid});
+    const loc = p.lookup(.humid_loc, humid);
+    //print("\tLoc: `{}`\n", .{loc});
+    return loc;
+}
+
 fn part1(p: *const Puzzle) !usize {
     var smallest_location: usize = 0xFFFF_FFFF_FFFF_FFFF;
 
     // check all the seeds to see who gets the smallest location
     for (p.seeds.items) |seed| {
-        //print("$ Seed `{}`\n", .{seed});
-        const soil = p.lookup(.seed_soil, seed);
-        //print("\tSoil: `{}`\n", .{soil});
-        const fert = p.lookup(.soil_fert, soil);
-        //print("\tFert: `{}`\n", .{fert});
-        const water = p.lookup(.fert_water, fert);
-        //print("\tWater: `{}`\n", .{water});
-        const light = p.lookup(.water_light, water);
-        //print("\tLight: `{}`\n", .{light});
-        const temp = p.lookup(.light_temp, light);
-        //print("\tTemp: `{}`\n", .{temp});
-        const humid = p.lookup(.temp_humid, temp);
-        //print("\tHumid: `{}`\n", .{humid});
-        const loc = p.lookup(.humid_loc, humid);
-        //print("\tLoc: `{}`\n", .{loc});
-
+        const loc = seedToLoc(p, seed);
         if (loc < smallest_location) {
             //print("!! new smallest loc: `{}` over `{}`\n", .{ loc, smallest_location });
             smallest_location = loc;
@@ -277,6 +281,34 @@ fn part1(p: *const Puzzle) !usize {
     }
 
     return smallest_location;
+}
+
+fn part2(p: *const Puzzle) !usize {
+    var small: usize = 0xFFFF_FFFF_FFFF_FFFF;
+
+    const num_pairs = p.seeds.items.len / 2;
+    print("`{}` seed pairs\n", .{num_pairs});
+
+    for (0..num_pairs) |pair_base| {
+        const idx_loc = pair_base * 2;
+        const size_loc = idx_loc + 1;
+        const base = p.seeds.items[idx_loc];
+        const size = p.seeds.items[size_loc];
+        var idx: usize = 0;
+        print("[Pair {}]: `{}` iterations\n", .{ pair_base, size });
+
+        // go from base -> base + size
+        while (idx < size) : (idx += 1) {
+            const seed_num = base + idx;
+
+            const loc = seedToLoc(p, seed_num);
+            if (loc < small) {
+                small = loc;
+            }
+        }
+    }
+
+    return small;
 }
 
 pub fn main() !void {
@@ -287,6 +319,8 @@ pub fn main() !void {
 
     print("[Test Data] Part1: `{}`\n", .{try part1(&test_puzzle_input)});
     print("[Real Data] Part1: `{}`\n", .{try part1(&real_puzzle_input)});
+    print("[Test Data] Part2: `{}`\n", .{try part2(&test_puzzle_input)});
+    print("[Real Data] Part2: `{}`\n", .{try part2(&real_puzzle_input)});
 }
 
 // Useful stdlib functions
